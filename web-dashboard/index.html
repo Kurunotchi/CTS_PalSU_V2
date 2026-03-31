@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PSU CTS - Battery Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="background-animation"></div>
+
+    <header class="top-nav">
+        <div class="logo">
+            <h1>PSU CTS</h1>
+            <span class="subtitle">Battery Capacity Tester</span>
+        </div>
+        <div class="controls">
+            <div class="ip-group">
+                <label for="esp-ip">ESP32 IP:</label>
+                <input type="text" id="esp-ip" value="192.168.1.100" placeholder="e.g. 192.168.1.10">
+                <button id="connect-btn" class="btn primary">Connect</button>
+            </div>
+            <button id="export-csv-btn" class="btn secondary export-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                </svg>
+                Export CSV
+            </button>
+        </div>
+    </header>
+
+    <main class="dashboard-grid">
+        <!-- Slot A -->
+        <article class="slot-card active-slot" id="slot-A" onclick="selectSlot('A')">
+            <header class="slot-header">
+                <h2>Slot A</h2>
+                <div class="status-badge" id="badge-A">IDLE</div>
+            </header>
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <span class="label">Voltage</span>
+                    <span class="value" id="v-A">0.00 <small>V</small></span>
+                </div>
+                <div class="stat-box">
+                    <span class="label">Current</span>
+                    <span class="value" id="c-A">0 <small>mA</small></span>
+                </div>
+                <div class="stat-box highlight">
+                    <span class="label">Simpson Capacity</span>
+                    <span class="value" id="cap-A">0.000 <small>mAh</small></span>
+                </div>
+                <div class="stat-box">
+                    <span class="label">Battery #</span>
+                    <input type="number" id="batt-A" class="batt-input" placeholder="0">
+                    <button class="btn-micro" onclick="setBattNum('A')">Set</button>
+                </div>
+            </div>
+            <div class="cycle-info hidden" id="cycle-info-A">
+                Cycles: <span id="cycle-cnt-A">0</span> / <span id="cycle-tgt-A">0</span>
+            </div>
+            <div class="actions">
+                <div class="mode-selector">
+                    <select id="mode-sel-A" onchange="toggleCycleInput('A')">
+                        <option value="1">Charge</option>
+                        <option value="2">Discharge</option>
+                        <option value="3">Cycle</option>
+                    </select>
+                    <input type="number" id="cycles-A" class="cycle-input hidden" value="3" min="1" max="100">
+                </div>
+                <div class="action-buttons">
+                    <button class="btn action-btn start-btn" onclick="startSlot('A')">Start</button>
+                    <button class="btn action-btn stop" onclick="sendCommand('0', 'A')">Stop</button>
+                </div>
+            </div>
+        </article>
+
+        <!-- Slot B -->
+        <article class="slot-card" id="slot-B" onclick="selectSlot('B')">
+            <header class="slot-header">
+                <h2>Slot B</h2>
+                <div class="status-badge" id="badge-B">IDLE</div>
+            </header>
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <span class="label">Voltage</span>
+                    <span class="value" id="v-B">0.00 <small>V</small></span>
+                </div>
+                <div class="stat-box">
+                    <span class="label">Current</span>
+                    <span class="value" id="c-B">0 <small>mA</small></span>
+                </div>
+                <div class="stat-box highlight">
+                    <span class="label">Simpson Capacity</span>
+                    <span class="value" id="cap-B">0.000 <small>mAh</small></span>
+                </div>
+                <div class="stat-box">
+                    <span class="label">Battery #</span>
+                    <input type="number" id="batt-B" class="batt-input" placeholder="0">
+                    <button class="btn-micro" onclick="setBattNum('B')">Set</button>
+                </div>
+            </div>
+            <div class="cycle-info hidden" id="cycle-info-B">
+                Cycles: <span id="cycle-cnt-B">0</span> / <span id="cycle-tgt-B">0</span>
+            </div>
+            <div class="actions">
+                <div class="mode-selector">
+                    <select id="mode-sel-B" onchange="toggleCycleInput('B')">
+                        <option value="1">Charge</option>
+                        <option value="2">Discharge</option>
+                        <option value="3">Cycle</option>
+                    </select>
+                    <input type="number" id="cycles-B" class="cycle-input hidden" value="3" min="1" max="100">
+                </div>
+                <div class="action-buttons">
+                    <button class="btn action-btn start-btn" onclick="startSlot('B')">Start</button>
+                    <button class="btn action-btn stop" onclick="sendCommand('0', 'B')">Stop</button>
+                </div>
+            </div>
+        </article>
+
+        <!-- Slot C -->
+        <article class="slot-card" id="slot-C" onclick="selectSlot('C')">
+            <header class="slot-header">
+                <h2>Slot C</h2>
+                <div class="status-badge" id="badge-C">IDLE</div>
+            </header>
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <span class="label">Voltage</span>
+                    <span class="value" id="v-C">0.00 <small>V</small></span>
+                </div>
+                <div class="stat-box">
+                    <span class="label">Current</span>
+                    <span class="value" id="c-C">0 <small>mA</small></span>
+                </div>
+                <div class="stat-box highlight">
+                    <span class="label">Simpson Capacity</span>
+                    <span class="value" id="cap-C">0.000 <small>mAh</small></span>
+                </div>
+                <div class="stat-box">
+                    <span class="label">Battery #</span>
+                    <input type="number" id="batt-C" class="batt-input" placeholder="0">
+                    <button class="btn-micro" onclick="setBattNum('C')">Set</button>
+                </div>
+            </div>
+            <div class="cycle-info hidden" id="cycle-info-C">
+                Cycles: <span id="cycle-cnt-C">0</span> / <span id="cycle-tgt-C">0</span>
+            </div>
+            <div class="actions">
+                <div class="mode-selector">
+                    <select id="mode-sel-C" onchange="toggleCycleInput('C')">
+                        <option value="1">Charge</option>
+                        <option value="2">Discharge</option>
+                        <option value="3">Cycle</option>
+                    </select>
+                    <input type="number" id="cycles-C" class="cycle-input hidden" value="3" min="1" max="100">
+                </div>
+                <div class="action-buttons">
+                    <button class="btn action-btn start-btn" onclick="startSlot('C')">Start</button>
+                    <button class="btn action-btn stop" onclick="sendCommand('0', 'C')">Stop</button>
+                </div>
+            </div>
+        </article>
+
+        <!-- Slot D -->
+        <article class="slot-card" id="slot-D" onclick="selectSlot('D')">
+            <header class="slot-header">
+                <h2>Slot D</h2>
+                <div class="status-badge" id="badge-D">IDLE</div>
+            </header>
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <span class="label">Voltage</span>
+                    <span class="value" id="v-D">0.00 <small>V</small></span>
+                </div>
+                <div class="stat-box">
+                    <span class="label">Current</span>
+                    <span class="value" id="c-D">0 <small>mA</small></span>
+                </div>
+                <div class="stat-box highlight">
+                    <span class="label">Simpson Capacity</span>
+                    <span class="value" id="cap-D">0.000 <small>mAh</small></span>
+                </div>
+                <div class="stat-box">
+                    <span class="label">Battery #</span>
+                    <input type="number" id="batt-D" class="batt-input" placeholder="0">
+                    <button class="btn-micro" onclick="setBattNum('D')">Set</button>
+                </div>
+            </div>
+            <div class="cycle-info hidden" id="cycle-info-D">
+                Cycles: <span id="cycle-cnt-D">0</span> / <span id="cycle-tgt-D">0</span>
+            </div>
+            <div class="actions">
+                <div class="mode-selector">
+                    <select id="mode-sel-D" onchange="toggleCycleInput('D')">
+                        <option value="1">Charge</option>
+                        <option value="2">Discharge</option>
+                        <option value="3">Cycle</option>
+                    </select>
+                    <input type="number" id="cycles-D" class="cycle-input hidden" value="3" min="1" max="100">
+                </div>
+                <div class="action-buttons">
+                    <button class="btn action-btn start-btn" onclick="startSlot('D')">Start</button>
+                    <button class="btn action-btn stop" onclick="sendCommand('0', 'D')">Stop</button>
+                </div>
+            </div>
+        </article>
+    </main>
+
+    <section class="chart-section">
+        <header class="chart-header">
+            <h2>Live Diagnostics <span id="chart-title-slot" style="color:#d2a8ff;">(Slot A)</span></h2>
+        </header>
+        <div class="chart-container">
+            <canvas id="liveChart"></canvas>
+        </div>
+    </section>
+
+    <div id="toast" class="toast hidden">Status updated</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>
