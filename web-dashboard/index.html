@@ -219,6 +219,30 @@
         </div>
     </section>
 
+    <section class="data-table-section">
+        <header class="chart-header">
+            <h2>Data Log <span id="table-title-slot" style="color:#d2a8ff;">(Slot A)</span></h2>
+        </header>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Date & Time</th>
+                        <th>Status</th>
+                        <th>Batt. No.</th>
+                        <th>Elapsed Time (s)</th>
+                        <th>Voltage (V)</th>
+                        <th>Current (mA)</th>
+                        <th>Simpson Capacity (mAh)</th>
+                    </tr>
+                </thead>
+                <tbody id="data-table-body">
+                    <!-- Rows injected via JS -->
+                </tbody>
+            </table>
+        </div>
+    </section>
+
     <div id="toast" class="toast hidden">Status updated</div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
