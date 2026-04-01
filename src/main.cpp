@@ -263,21 +263,48 @@ void handleCommand() {
     
     switch(cmdChar) {
       case '1': // Charge
-        updateSlotRelays(slotChar, '1');
+        if (battNumForSlot(slotChar) > 0) {
+          updateSlotRelays(slotChar, '1');
+          char sheetId[50];
+          float v = 0, c = 0, cap = 0;
+          if (slotChar == 'A') { strcpy(sheetId, SHEET_ID_A); v = voltageA; c = currentA; cap = capacityA; elapsedA = 0; }
+          else if (slotChar == 'B') { strcpy(sheetId, SHEET_ID_B); v = voltageB; c = currentB; cap = capacityB; elapsedB = 0; }
+          else if (slotChar == 'C') { strcpy(sheetId, SHEET_ID_C); v = voltageC; c = currentC; cap = capacityC; elapsedC = 0; }
+          else if (slotChar == 'D') { strcpy(sheetId, SHEET_ID_D); v = voltageD; c = currentD; cap = capacityD; elapsedD = 0; }
+          logSlotToSheet(sheetId, "Charging", battNumForSlot(slotChar), 0, v, c, cap, false, "Charge");
+        }
         break;
       case '2': // Discharge
-        resetCapacity(slotChar);
-        startDischargeWithDelay(slotChar);
+        if (battNumForSlot(slotChar) > 0) {
+          resetCapacity(slotChar);
+          startDischargeWithDelay(slotChar);
+          char sheetId[50];
+          float v = 0, c = 0, cap = 0;
+          if (slotChar == 'A') { strcpy(sheetId, SHEET_ID_A); v = voltageA; c = currentA; cap = capacityA; }
+          else if (slotChar == 'B') { strcpy(sheetId, SHEET_ID_B); v = voltageB; c = currentB; cap = capacityB; }
+          else if (slotChar == 'C') { strcpy(sheetId, SHEET_ID_C); v = voltageC; c = currentC; cap = capacityC; }
+          else if (slotChar == 'D') { strcpy(sheetId, SHEET_ID_D); v = voltageD; c = currentD; cap = capacityD; }
+          logSlotToSheet(sheetId, "Discharging", battNumForSlot(slotChar), 0, v, c, cap, false, "Discharge");
+        }
         break;
       case '3': { // Cycle
-        int cycles = doc["cycles"] | 3;
-        switch (slotChar) {
-          case 'A': cycleTargetA = cycles; cycleCountA = 0; resetCapacity('A'); break;
-          case 'B': cycleTargetB = cycles; cycleCountB = 0; resetCapacity('B'); break;
-          case 'C': cycleTargetC = cycles; cycleCountC = 0; resetCapacity('C'); break;
-          case 'D': cycleTargetD = cycles; cycleCountD = 0; resetCapacity('D'); break;
+        if (battNumForSlot(slotChar) > 0) {
+          int cycles = doc["cycles"] | 3;
+          switch (slotChar) {
+            case 'A': cycleTargetA = cycles; cycleCountA = 0; resetCapacity('A'); break;
+            case 'B': cycleTargetB = cycles; cycleCountB = 0; resetCapacity('B'); break;
+            case 'C': cycleTargetC = cycles; cycleCountC = 0; resetCapacity('C'); break;
+            case 'D': cycleTargetD = cycles; cycleCountD = 0; resetCapacity('D'); break;
+          }
+          startCycle(slotChar);
+          char sheetId[50];
+          float v = 0, c = 0, cap = 0;
+          if (slotChar == 'A') { strcpy(sheetId, SHEET_ID_A); v = voltageA; c = currentA; cap = capacityA; elapsedA = 0; }
+          else if (slotChar == 'B') { strcpy(sheetId, SHEET_ID_B); v = voltageB; c = currentB; cap = capacityB; elapsedB = 0; }
+          else if (slotChar == 'C') { strcpy(sheetId, SHEET_ID_C); v = voltageC; c = currentC; cap = capacityC; elapsedC = 0; }
+          else if (slotChar == 'D') { strcpy(sheetId, SHEET_ID_D); v = voltageD; c = currentD; cap = capacityD; elapsedD = 0; }
+          logSlotToSheet(sheetId, "Cycle Start", battNumForSlot(slotChar), 0, v, c, cap, true, "Charge");
         }
-        startCycle(slotChar);
         break;
       }
       case '4': // Set Battery Number
@@ -636,76 +663,76 @@ void loop() {
   }
   // Regular interval logging every 60 seconds when discharging
   // Slot A
-  bool Aactive = (statusA == "Discharging" && battNumA > 0);
+  bool Aactive = ((Acharge || Adischarge || Acycle) && battNumA > 0);
   static bool lastAactive = false;
-  if (Aactive && !lastAactive) delay(1000);
+  if (Aactive && !lastAactive) {
+    delay(1000);
+    lastLogA = now;
+    elapsedA = 0;
+  }
   lastAactive = Aactive;
   if (Aactive && (now - lastLogA >= logInterval)) {
     lastLogA = now;
+    elapsedA += 60;
     bool present = (voltageA > 2.0);
-    if (Aactive && !lastAactive) {
-        elapsedA = 0;
-        lastLogA = now;
-    }
     if (!present) elapsedA = 0;
     if (GSheet.ready()) {
         logSlotToSheet(SHEET_ID_A, statusA, battNumA, elapsedA, voltageA, currentA, capacityA, Acycle, Adischarge ? "Discharge" : (Acharge ? "Charge" : "None"));
     }
-    elapsedA += 60;
   }
   // Slot B
-  bool Bactive = (statusB == "Discharging" && battNumB > 0);
+  bool Bactive = ((Bcharge || Bdischarge || Bcycle) && battNumB > 0);
   static bool lastBactive = false;
-  if (Bactive && !lastBactive) delay(1000);
+  if (Bactive && !lastBactive) {
+    delay(1000);
+    lastLogB = now;
+    elapsedB = 0;
+  }
   lastBactive = Bactive;
   if (Bactive && (now - lastLogB >= logInterval)) {
     lastLogB = now;
+    elapsedB += 60;
     bool present = (voltageB > 2.0);
-    if (Bactive && !lastBactive) {
-        elapsedB = 0;
-        lastLogB = now;
-    }
     if (!present) elapsedB = 0;
     if (GSheet.ready()) {
         logSlotToSheet(SHEET_ID_B, statusB, battNumB, elapsedB, voltageB, currentB, capacityB, Bcycle, Bdischarge ? "Discharge" : (Bcharge ? "Charge" : "None"));
     }
-    elapsedB += 60;
   }
   // Slot C
-  bool Cactive = (statusC == "Discharging" && battNumC > 0);
+  bool Cactive = ((Ccharge || Cdischarge || Ccycle) && battNumC > 0);
   static bool lastCactive = false;
-  if (Cactive && !lastCactive) delay(1000);
+  if (Cactive && !lastCactive) {
+    delay(1000);
+    lastLogC = now;
+    elapsedC = 0;
+  }
   lastCactive = Cactive;
   if (Cactive && (now - lastLogC >= logInterval)) {
     lastLogC = now;
+    elapsedC += 60;
     bool present = (voltageC > 2.0);
-    if (Cactive && !lastCactive) {
-        elapsedC = 0;
-        lastLogC = now;
-    }
     if (!present) elapsedC = 0;
     if (GSheet.ready()) {
         logSlotToSheet(SHEET_ID_C, statusC, battNumC, elapsedC, voltageC, currentC, capacityC, Ccycle, Cdischarge ? "Discharge" : (Ccharge ? "Charge" : "None"));
     }
-    elapsedC += 60;
   }
   // Slot D
-  bool Dactive = (statusD == "Discharging" && battNumD > 0);
+  bool Dactive = ((Dcharge || Ddischarge || Dcycle) && battNumD > 0);
   static bool lastDactive = false;
-  if (Dactive && !lastDactive) delay(1000);
+  if (Dactive && !lastDactive) {
+    delay(1000);
+    lastLogD = now;
+    elapsedD = 0;
+  }
   lastDactive = Dactive;
   if (Dactive && (now - lastLogD >= logInterval)) {
     lastLogD = now;
+    elapsedD += 60;
     bool present = (voltageD > 2.0);
-    if (Dactive && !lastDactive) {
-        elapsedD = 0;
-        lastLogD = now;
-    }
     if (!present) elapsedD = 0;
     if (GSheet.ready()) {
         logSlotToSheet(SHEET_ID_D, statusD, battNumD, elapsedD, voltageD, currentD, capacityD, Dcycle, Ddischarge ? "Discharge" : (Dcharge ? "Charge" : "None"));
     }
-    elapsedD += 60;
   }
   // If no key pressed, we're done
   if (!key) return;
@@ -1196,6 +1223,9 @@ void checkVoltageLimit(char slot) {
             // Start discharge phase of cycle
             resetCapacity('A');
             Adischarge = true;
+            elapsedA = 0;
+            lastLogA = millis();
+            logSlotToSheet(SHEET_ID_A, "CYCLE - DISCHARGING", battNumA, 0, voltageA, currentA, capacityA, Acycle, "Discharge");
             digitalWrite(AMS, LOW);
             digitalWrite(ACD, LOW);
             Serial.print("Slot A cycle progress: Charge ");
@@ -1224,6 +1254,9 @@ void checkVoltageLimit(char slot) {
           // Always go back to charging
           resetCapacity('A');
           Acharge = true;
+          elapsedA = 0;
+          lastLogA = millis();
+          logSlotToSheet(SHEET_ID_A, "CYCLE - CHARGING", battNumA, 0, voltageA, currentA, capacityA, Acycle, "Charge");
           digitalWrite(AMS, LOW);
           digitalWrite(ACD, HIGH);
           Serial.print("Slot A discharge ");
@@ -1267,6 +1300,9 @@ void checkVoltageLimit(char slot) {
             // Start discharge phase of cycle
             resetCapacity('B');
             Bdischarge = true;
+            elapsedB = 0;
+            lastLogB = millis();
+            logSlotToSheet(SHEET_ID_B, "CYCLE - DISCHARGING", battNumB, 0, voltageB, currentB, capacityB, Bcycle, "Discharge");
             digitalWrite(BMS, LOW);
             digitalWrite(BCD, LOW);
             Serial.print("Slot B cycle progress: Charge ");
@@ -1294,6 +1330,9 @@ void checkVoltageLimit(char slot) {
           // Always go back to charging
           resetCapacity('B');
           Bcharge = true;
+          elapsedB = 0;
+          lastLogB = millis();
+          logSlotToSheet(SHEET_ID_B, "CYCLE - CHARGING", battNumB, 0, voltageB, currentB, capacityB, Bcycle, "Charge");
           digitalWrite(BMS, LOW);
           digitalWrite(BCD, HIGH);
           Serial.print("Slot B discharge ");
@@ -1337,6 +1376,9 @@ void checkVoltageLimit(char slot) {
             // Start discharge phase of cycle
             resetCapacity('C');
             Cdischarge = true;
+            elapsedC = 0;
+            lastLogC = millis();
+            logSlotToSheet(SHEET_ID_C, "CYCLE - DISCHARGING", battNumC, 0, voltageC, currentC, capacityC, Ccycle, "Discharge");
             digitalWrite(CMS, LOW);
             digitalWrite(CCD, LOW);
             Serial.print("Slot C cycle progress: Charge ");
@@ -1364,6 +1406,9 @@ void checkVoltageLimit(char slot) {
           // Always go back to charging
           resetCapacity('C');
           Ccharge = true;
+          elapsedC = 0;
+          lastLogC = millis();
+          logSlotToSheet(SHEET_ID_C, "CYCLE - CHARGING", battNumC, 0, voltageC, currentC, capacityC, Ccycle, "Charge");
           digitalWrite(CMS, LOW);
           digitalWrite(CCD, HIGH);
           Serial.print("Slot C discharge ");
@@ -1407,6 +1452,9 @@ void checkVoltageLimit(char slot) {
             // Start discharge phase of cycle
             resetCapacity('D');
             Ddischarge = true;
+            elapsedD = 0;
+            lastLogD = millis();
+            logSlotToSheet(SHEET_ID_D, "CYCLE - DISCHARGING", battNumD, 0, voltageD, currentD, capacityD, Dcycle, "Discharge");
             digitalWrite(DMS, LOW);
             digitalWrite(DCD, LOW);
             Serial.print("Slot D cycle progress: Charge ");
@@ -1434,6 +1482,9 @@ void checkVoltageLimit(char slot) {
           // Always go back to charging
           resetCapacity('D');
           Dcharge = true;
+          elapsedD = 0;
+          lastLogD = millis();
+          logSlotToSheet(SHEET_ID_D, "CYCLE - CHARGING", battNumD, 0, voltageD, currentD, capacityD, Dcycle, "Charge");
           digitalWrite(DMS, LOW);
           digitalWrite(DCD, HIGH);
           Serial.print("Slot D discharge ");
