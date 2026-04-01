@@ -35,7 +35,11 @@ function startFetching() {
     fetchInterval = setInterval(fetchData, 2000); // then every 2 seconds
 }
 
+let isFetching = false;
+
 async function fetchData() {
+    if (isFetching) return;
+    isFetching = true;
     try {
         const res = await fetch(`http://${espIp}/status`, { cache: "no-store", mode: "cors" });
         if (!res.ok) throw new Error("Network response was not ok");
@@ -65,9 +69,13 @@ async function fetchData() {
         if (selectedSlotData) {
             updateChart(timeLabel, selectedSlotData.voltage, selectedSlotData.current, selectedSlotData.capacity);
         }
+        
+        renderDataTable();
 
     } catch (e) {
         console.warn("Fetch failed, is ESP32 on?", e);
+    } finally {
+        isFetching = false;
     }
 }
 
@@ -184,6 +192,35 @@ function showToast(msg, isError = false) {
     setTimeout(() => toast.classList.add("hidden"), 3000);
 }
 
+// ==== DATA DEDUPLICATION LOGIC ====
+function getCleanRows(slotId) {
+    const validRows = [];
+    let maxElapsed = -1;
+    let currentMode = "";
+
+    // Sort history chronologically to absolutely prevent out-of-order records
+    const sortedHistory = [...historyData].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    sortedHistory.forEach(row => {
+        const slotData = row[`slot${slotId}`];
+        if (slotData && !slotData.mode.includes("IDLE")) {
+            // New mode block starts, reset maximum tracking
+            if (slotData.mode !== currentMode) {
+                currentMode = slotData.mode;
+                maxElapsed = slotData.elapsed || 0;
+                validRows.push(row);
+            } 
+            // In the same mode block, ensure elapsed time monotonically increases
+            else if (slotData.elapsed > maxElapsed) {
+                maxElapsed = slotData.elapsed;
+                validRows.push(row);
+            }
+        }
+    });
+
+    return validRows;
+}
+
 // ==== CSV EXPORT ====
 function exportCSV() {
     if (historyData.length === 0) {
@@ -193,14 +230,16 @@ function exportCSV() {
     // Headers: Date & Time, Status, Batt. No., Elapsed Time (s), Voltage (V), Current (mA), Simpson Capacity (mAh)
     let csv = "Date & Time,Status,Batt. No.,Elapsed Time (s),Voltage (V),Current (mA),Simpson Capacity (mAh)\n";
 
-    historyData.forEach(row => {
+    const cleanRows = getCleanRows(selectedChartSlot);
+
+    cleanRows.forEach(row => {
         const slotData = row[`slot${selectedChartSlot}`];
-        if (slotData) {
-            // Format time seamlessly as YYYY-MM-DD HH:MM:SS
+            
+            // Format time seamlessly as MM/DD/YYYY HH:MM
             const dateObj = new Date(row.timestamp);
             const timeStr = dateObj.toLocaleString('en-US', { 
-                year: 'numeric', month: '2-digit', day: '2-digit', 
-                hour: '12-digit', minute:'2-digit', second:'2-digit', hour12: false
+                month: '2-digit', day: '2-digit', year: 'numeric', 
+                hour: '2-digit', minute:'2-digit', hour12: false
             }).replace(',', '');
             
             const r = [
@@ -208,12 +247,12 @@ function exportCSV() {
                 slotData.mode,
                 slotData.battery_num,
                 slotData.elapsed || 0,
+                // voltage and current formats from screenshot: 4.092, 347 (approx 3 dec, 0 dec)
                 slotData.voltage.toFixed(3),
                 slotData.current.toFixed(0),
                 slotData.capacity.toFixed(4)
             ];
             csv += r.join(",") + "\n";
-        }
     });
 
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -226,6 +265,44 @@ function exportCSV() {
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
     showToast(`Slot ${selectedChartSlot} CSV Downloaded!`);
+}
+
+// ==== DATA TABLE LOGIC ====
+function renderDataTable() {
+    const tbody = document.getElementById('data-table-body');
+    if (!tbody) return;
+
+    let html = '';
+    const cleanRows = getCleanRows(selectedChartSlot);
+
+    cleanRows.forEach(row => {
+        const slotData = row[`slot${selectedChartSlot}`];
+        
+        const dateObj = new Date(row.timestamp);
+        const timeStr = dateObj.toLocaleString('en-US', { 
+            month: '2-digit', day: '2-digit', year: 'numeric', 
+            hour: '2-digit', minute:'2-digit', hour12: false
+        }).replace(',', '');
+        
+        html += `<tr>
+            <td>${timeStr}</td>
+            <td>${slotData.mode}</td>
+            <td>${slotData.battery_num}</td>
+            <td>${slotData.elapsed || 0}</td>
+            <td>${slotData.voltage.toFixed(3)}</td>
+            <td>${slotData.current.toFixed(0)}</td>
+            <td>${slotData.capacity.toFixed(4)}</td>
+        </tr>`;
+    });
+
+    const container = tbody.closest('.table-container');
+    const isAtBottom = container && (container.scrollHeight - container.scrollTop <= container.clientHeight + 50);
+
+    tbody.innerHTML = html;
+
+    if (isAtBottom && container) {
+        container.scrollTop = container.scrollHeight;
+    }
 }
 
 // ==== CHART LOGIC ====
@@ -270,6 +347,11 @@ function selectSlot(slotStr) {
         liveChart.data.datasets[2].data = capData;
         liveChart.update();
     }
+    
+    const tableSlotElem = document.getElementById('table-title-slot');
+    if (tableSlotElem) tableSlotElem.innerText = `(Slot ${slotStr})`;
+    
+    renderDataTable();
 }
 
 function initChart() {
@@ -349,4 +431,3 @@ function updateChart(timeLabel, vVal, cVal, capVal) {
     
     liveChart.update('none');
 }
-
