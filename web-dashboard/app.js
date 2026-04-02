@@ -1,6 +1,7 @@
 let espIp = "192.168.1.100";
 let fetchInterval = null;
 let selectedChartSlot = 'A'; // Which slot is actively graphed
+let liveChart = null; // Chart.js instance
 
 // The data buffer for CSV Export
 // Structure: { timestamp, slotA: {v,c,cap,mode}, slotB: {...}, ... }
@@ -50,19 +51,42 @@ async function fetchData() {
             timestamp: new Date().toISOString()
         };
         const timeLabel = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
-        let aV=null, bV=null, cV=null, dV=null;
 
         data.forEach(slotData => {
             updateSlotUI(slotData);
             record[`slot${slotData.slot}`] = slotData;
-            if(slotData.slot === 'A') aV = slotData.voltage;
-            if(slotData.slot === 'B') bV = slotData.voltage;
-            if(slotData.slot === 'C') cV = slotData.voltage;
-            if(slotData.slot === 'D') dV = slotData.voltage;
         });
 
-        // Add to history
-        historyData.push(record);
+        // Check for duplicates before adding to history
+        let shouldAdd = true;
+        if (historyData.length > 0) {
+            const lastRecord = historyData[historyData.length - 1];
+            // Check if this record is identical to the last one
+            let isDuplicate = true;
+            for (const slot of ['A', 'B', 'C', 'D']) {
+                const lastSlotData = lastRecord[`slot${slot}`];
+                const currentSlotData = record[`slot${slot}`];
+                if (lastSlotData && currentSlotData) {
+                    if (lastSlotData.voltage !== currentSlotData.voltage ||
+                        lastSlotData.current !== currentSlotData.current ||
+                        lastSlotData.capacity !== currentSlotData.capacity ||
+                        lastSlotData.elapsed !== currentSlotData.elapsed) {
+                        isDuplicate = false;
+                        break;
+                    }
+                } else if (lastSlotData || currentSlotData) {
+                    isDuplicate = false;
+                    break;
+                }
+            }
+            if (isDuplicate) {
+                shouldAdd = false;
+            }
+        }
+        
+        if (shouldAdd) {
+            historyData.push(record);
+        }
 
         // Update live chart for the currently selected slot
         const selectedSlotData = record[`slot${selectedChartSlot}`];
@@ -192,69 +216,116 @@ function showToast(msg, isError = false) {
     setTimeout(() => toast.classList.add("hidden"), 3000);
 }
 
-// ==== DATA DEDUPLICATION LOGIC ====
+// ==== FIXED: Reset elapsed time for discharging ====
 function getCleanRows(slotId) {
     const validRows = [];
-    let maxElapsed = -1;
-    let currentMode = "";
-
-    // Sort history chronologically to absolutely prevent out-of-order records
+    let lastElapsed = -1;
+    let lastMode = "";
+    let dischargeStartTime = null;
+    let baseElapsed = 0;
+    
+    // Sort history chronologically
     const sortedHistory = [...historyData].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-
+    
     sortedHistory.forEach(row => {
         const slotData = row[`slot${slotId}`];
         if (slotData && !slotData.mode.includes("IDLE")) {
-            // New mode block starts, reset maximum tracking
-            if (slotData.mode !== currentMode) {
-                currentMode = slotData.mode;
-                maxElapsed = slotData.elapsed || 0;
-                validRows.push(row);
-            } 
-            // In the same mode block, ensure elapsed time monotonically increases
-            else if (slotData.elapsed > maxElapsed) {
-                maxElapsed = slotData.elapsed;
-                validRows.push(row);
+            let currentElapsed = slotData.elapsed || 0;
+            const currentMode = slotData.mode;
+            
+            // Reset elapsed time when switching to DISCHARGING
+            if (lastMode === "CYCLE - CHARGING" && currentMode === "CYCLE - DISCHARGING") {
+                dischargeStartTime = currentElapsed;
+                baseElapsed = currentElapsed;
+                currentElapsed = 0; // Reset to 0 for first discharging entry
+            }
+            // Adjust elapsed time for subsequent discharging entries
+            else if (currentMode === "CYCLE - DISCHARGING" && dischargeStartTime !== null) {
+                currentElapsed = currentElapsed - baseElapsed;
+            }
+            // Reset tracking when charging starts again
+            else if (currentMode === "CYCLE - CHARGING" && lastMode === "CYCLE - DISCHARGING") {
+                dischargeStartTime = null;
+                baseElapsed = 0;
+            }
+            
+            // Keep row if elapsed time increased OR mode changed
+            if (currentElapsed !== lastElapsed || currentMode !== lastMode) {
+                // Create a modified copy of the row with corrected elapsed time
+                const modifiedRow = {
+                    ...row,
+                    [`slot${slotId}`]: {
+                        ...slotData,
+                        elapsed: currentElapsed
+                    }
+                };
+                validRows.push(modifiedRow);
+                lastElapsed = currentElapsed;
+                lastMode = currentMode;
             }
         }
     });
-
+    
     return validRows;
 }
 
-// ==== CSV EXPORT ====
+// ==== CLEAN CSV EXPORT - EXACT MATCH TO YOUR FORMAT ====
 function exportCSV() {
     if (historyData.length === 0) {
         return alert("No data recorded yet. Wait for a connection.");
     }
     
-    // Headers: Date & Time, Status, Batt. No., Elapsed Time (s), Voltage (V), Current (mA), Simpson Capacity (mAh)
     let csv = "Date & Time,Status,Batt. No.,Elapsed Time (s),Voltage (V),Current (mA),Simpson Capacity (mAh)\n";
-
-    const cleanRows = getCleanRows(selectedChartSlot);
-
-    cleanRows.forEach(row => {
+    
+    const allRows = getCleanRows(selectedChartSlot);
+    
+    let lastMode = "";
+    let separatorAdded = false;
+    
+    for (let i = 0; i < allRows.length; i++) {
+        const row = allRows[i];
         const slotData = row[`slot${selectedChartSlot}`];
-            
-            // Format time seamlessly as MM/DD/YYYY HH:MM
-            const dateObj = new Date(row.timestamp);
-            const timeStr = dateObj.toLocaleString('en-US', { 
-                month: '2-digit', day: '2-digit', year: 'numeric', 
-                hour: '2-digit', minute:'2-digit', hour12: false
-            }).replace(',', '');
-            
-            const r = [
-                timeStr,
-                slotData.mode,
-                slotData.battery_num,
-                slotData.elapsed || 0,
-                // voltage and current formats from screenshot: 4.092, 347 (approx 3 dec, 0 dec)
-                slotData.voltage.toFixed(3),
-                slotData.current.toFixed(0),
-                slotData.capacity.toFixed(4)
-            ];
-            csv += r.join(",") + "\n";
-    });
-
+        const currentMode = slotData.mode;
+        
+        // Add separator and Simpson output ONLY ONCE when switching from CHARGING to DISCHARGING
+        if (!separatorAdded && lastMode === "CYCLE - CHARGING" && currentMode === "CYCLE - DISCHARGING") {
+            // Get the last charging row's data
+            const prevRow = allRows[i - 1];
+            if (prevRow) {
+                const prevSlotData = prevRow[`slot${selectedChartSlot}`];
+                if (prevSlotData) {
+                    // Add separator line
+                    csv += "----------------------------------------------------------------------------------\n";
+                    // Add Simpson Capacity Output with values on the same line
+                    csv += `Simpson Capacity Output: ,,,,${prevSlotData.current.toFixed(0)},${prevSlotData.capacity.toFixed(4)}\n`;
+                    // Add separator line
+                    csv += "----------------------------------------------------------------------------------\n";
+                }
+            }
+            separatorAdded = true;
+        }
+        
+        const dateObj = new Date(row.timestamp);
+        const timeStr = dateObj.toLocaleString('en-US', { 
+            month: '2-digit', day: '2-digit', year: 'numeric', 
+            hour: '2-digit', minute:'2-digit', second:'2-digit',
+            hour12: false
+        }).replace(',', '');
+        
+        const r = [
+            timeStr,
+            slotData.mode,
+            slotData.battery_num,
+            slotData.elapsed || 0,
+            slotData.voltage.toFixed(3),
+            slotData.current.toFixed(0),
+            slotData.capacity.toFixed(4)
+        ];
+        csv += r.join(",") + "\n";
+        
+        lastMode = currentMode;
+    }
+    
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -267,33 +338,73 @@ function exportCSV() {
     showToast(`Slot ${selectedChartSlot} CSV Downloaded!`);
 }
 
-// ==== DATA TABLE LOGIC ====
+// ==== FIXED DATA TABLE WITH SIMPSON OUTPUT AND RESET ELAPSED TIME ====
 function renderDataTable() {
     const tbody = document.getElementById('data-table-body');
     if (!tbody) return;
 
     let html = '';
     const cleanRows = getCleanRows(selectedChartSlot);
-
-    cleanRows.forEach(row => {
+    
+    let lastMode = "";
+    let separatorAdded = false;
+    
+    for (let i = 0; i < cleanRows.length; i++) {
+        const row = cleanRows[i];
         const slotData = row[`slot${selectedChartSlot}`];
+        const currentMode = slotData.mode;
+        
+        // Add separator and Simpson output when switching from CHARGING to DISCHARGING
+        if (!separatorAdded && lastMode === "CYCLE - CHARGING" && currentMode === "CYCLE - DISCHARGING") {
+            const prevRow = cleanRows[i - 1];
+            if (prevRow) {
+                const prevSlotData = prevRow[`slot${selectedChartSlot}`];
+                if (prevSlotData) {
+                    html += `<tr class="separator-row">
+                        <td colspan="7" style="text-align: center; background-color: rgba(255,255,255,0.05); padding: 5px;">
+                            ----------------------------------------------------------------------------------
+                        </td>
+                    </tr>`;
+                    
+                    html += `<tr class="simpson-row" style="background-color: rgba(163, 113, 247, 0.15);">
+                        <td colspan="4" style="font-weight: bold; color: #a371f7;">Simpson Capacity Output:</td>
+                        <td></td>
+                        <td style="font-weight: bold;">${prevSlotData.current.toFixed(0)} mA</td>
+                        <td style="font-weight: bold;">${prevSlotData.capacity.toFixed(4)} mAh</td>
+                    </tr>`;
+                    
+                    html += `<tr class="separator-row">
+                        <td colspan="7" style="text-align: center; background-color: rgba(255,255,255,0.05); padding: 5px;">
+                            ----------------------------------------------------------------------------------
+                        </td>
+                    </tr>`;
+                }
+            }
+            separatorAdded = true;
+        }
         
         const dateObj = new Date(row.timestamp);
         const timeStr = dateObj.toLocaleString('en-US', { 
             month: '2-digit', day: '2-digit', year: 'numeric', 
-            hour: '2-digit', minute:'2-digit', hour12: false
+            hour: '2-digit', minute:'2-digit', second:'2-digit',
+            hour12: false
         }).replace(',', '');
+        
+        // Use the corrected elapsed time from slotData
+        const elapsedTime = slotData.elapsed || 0;
         
         html += `<tr>
             <td>${timeStr}</td>
             <td>${slotData.mode}</td>
             <td>${slotData.battery_num}</td>
-            <td>${slotData.elapsed || 0}</td>
+            <td>${elapsedTime}</td>
             <td>${slotData.voltage.toFixed(3)}</td>
             <td>${slotData.current.toFixed(0)}</td>
             <td>${slotData.capacity.toFixed(4)}</td>
         </tr>`;
-    });
+        
+        lastMode = currentMode;
+    }
 
     const container = tbody.closest('.table-container');
     const isAtBottom = container && (container.scrollHeight - container.scrollTop <= container.clientHeight + 50);
