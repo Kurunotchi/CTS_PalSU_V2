@@ -11,8 +11,8 @@
 #include <ArduinoJson.h>
 
 // WiFi credentials
-const char* ssid = "Kodicpogi21";
-const char* pass = "11123232";
+const char* ssid = "Salamat Shopee";
+const char* pass = "wednesday";
 WebServer server(80);
 unsigned long previousStatusTime = 0;
 const unsigned long statusInterval = 3000;
@@ -223,6 +223,24 @@ void calculateSimpsonCapacity(char slot, float current, unsigned long currentTim
 void resetCapacity(char slot);
 void resetSimpsonTracking(char slot);
 void logPhaseStart(char slot, const String& statusText);
+void logModeStartHeader(char slot, const String& headerText);
+
+void logModeStartHeader(char slot, const String& headerText) {
+  int bn = battNumForSlot(slot);
+  if (bn <= 0 || !GSheet.ready()) return;
+  float v = 0;
+  char sheetId[50];
+  switch(slot) {
+    case 'A': strcpy(sheetId, SHEET_ID_A); v = voltageA; break;
+    case 'B': strcpy(sheetId, SHEET_ID_B); v = voltageB; break;
+    case 'C': strcpy(sheetId, SHEET_ID_C); v = voltageC; break;
+    case 'D': strcpy(sheetId, SHEET_ID_D); v = voltageD; break;
+  }
+  logSlotToSheet(sheetId, headerText, bn, 0, v, 0, 0);
+  delay(100);
+  logSeparatorRow(sheetId);
+  delay(100);
+}
 
 void logPhaseStart(char slot, const String& statusText) {
   int bn = battNumForSlot(slot);
@@ -382,11 +400,13 @@ void handleCommand() {
     switch(cmdChar) {
       case '1': // Charge
         if (battNumForSlot(slotChar) > 0) {
+          resetCapacity(slotChar); resetSimpsonTracking(slotChar);
           updateSlotRelays(slotChar, '1');
           if (slotChar=='A'){elapsedA=0;}
           else if(slotChar=='B'){elapsedB=0;}
           else if(slotChar=='C'){elapsedC=0;}
           else if(slotChar=='D'){elapsedD=0;}
+          logModeStartHeader(slotChar, "Charge - Start");
           logPhaseStart(slotChar, "CHARGING");
         }
         break;
@@ -733,11 +753,13 @@ void loop() {
   if (inSettingScreen) {
     if (key=='1') {
       if (battNumForSlot(previousSlot)>0) {
+        resetCapacity(previousSlot); resetSimpsonTracking(previousSlot);
         updateSlotRelays(previousSlot,'1');
         if (previousSlot=='A'){elapsedA=0;}
         else if(previousSlot=='B'){elapsedB=0;}
         else if(previousSlot=='C'){elapsedC=0;}
         else if(previousSlot=='D'){elapsedD=0;}
+        logModeStartHeader(previousSlot, "Charge - Start");
         logPhaseStart(previousSlot, "CHARGING");
         inSettingScreen=false; refreshSlotDisplay();
       } else {
@@ -1044,6 +1066,10 @@ void checkVoltageLimit(char slot) {
             Serial.println("Slot A: charge→pause (2 s)");
           }
         } else {
+          if (battNumA > 0 && GSheet.ready()) {
+            delay(100); logSeparatorRow(SHEET_ID_A); delay(100);
+            logSlotToSheet(SHEET_ID_A, "Charge Complete", battNumA, elapsedA, voltageA, 0, capacityA);
+          }
           resetSlotRelays('A');
         }
       }
@@ -1072,6 +1098,10 @@ void checkVoltageLimit(char slot) {
           Serial.print("Slot A cycle "); Serial.print(cycleCountA); Serial.print("/");
           Serial.print(cycleTargetA); Serial.println(" - discharge→pause (2 s)");
         } else {
+          if (battNumA > 0 && GSheet.ready()) {
+            delay(100); logSeparatorRow(SHEET_ID_A); delay(100);
+            logSlotToSheet(SHEET_ID_A, "Discharge Complete", battNumA, elapsedA, voltageA, 0, capacityA);
+          }
           resetSlotRelays('A');
         }
         Serial.println("Slot A discharge ended.");
@@ -1112,6 +1142,10 @@ void checkVoltageLimit(char slot) {
             Serial.println("Slot B: charge→pause (2 s)");
           }
         } else {
+          if (battNumB > 0 && GSheet.ready()) {
+            delay(100); logSeparatorRow(SHEET_ID_B); delay(100);
+            logSlotToSheet(SHEET_ID_B, "Charge Complete", battNumB, elapsedB, voltageB, 0, capacityB);
+          }
           resetSlotRelays('B');
         }
       }
@@ -1138,6 +1172,10 @@ void checkVoltageLimit(char slot) {
           Serial.print("Slot B cycle "); Serial.print(cycleCountB); Serial.print("/");
           Serial.print(cycleTargetB); Serial.println(" - discharge→pause (2 s)");
         } else {
+          if (battNumB > 0 && GSheet.ready()) {
+            delay(100); logSeparatorRow(SHEET_ID_B); delay(100);
+            logSlotToSheet(SHEET_ID_B, "Discharge Complete", battNumB, elapsedB, voltageB, 0, capacityB);
+          }
           resetSlotRelays('B');
         }
         Serial.println("Slot B discharge ended.");
@@ -1178,6 +1216,10 @@ void checkVoltageLimit(char slot) {
             Serial.println("Slot C: charge→pause (2 s)");
           }
         } else {
+          if (battNumC > 0 && GSheet.ready()) {
+            delay(100); logSeparatorRow(SHEET_ID_C); delay(100);
+            logSlotToSheet(SHEET_ID_C, "Charge Complete", battNumC, elapsedC, voltageC, 0, capacityC);
+          }
           resetSlotRelays('C');
         }
       }
@@ -1204,6 +1246,10 @@ void checkVoltageLimit(char slot) {
           Serial.print("Slot C cycle "); Serial.print(cycleCountC); Serial.print("/");
           Serial.print(cycleTargetC); Serial.println(" - discharge→pause (2 s)");
         } else {
+          if (battNumC > 0 && GSheet.ready()) {
+            delay(100); logSeparatorRow(SHEET_ID_C); delay(100);
+            logSlotToSheet(SHEET_ID_C, "Discharge Complete", battNumC, elapsedC, voltageC, 0, capacityC);
+          }
           resetSlotRelays('C');
         }
         Serial.println("Slot C discharge ended.");
@@ -1244,6 +1290,10 @@ void checkVoltageLimit(char slot) {
             Serial.println("Slot D: charge→pause (2 s)");
           }
         } else {
+          if (battNumD > 0 && GSheet.ready()) {
+            delay(100); logSeparatorRow(SHEET_ID_D); delay(100);
+            logSlotToSheet(SHEET_ID_D, "Charge Complete", battNumD, elapsedD, voltageD, 0, capacityD);
+          }
           resetSlotRelays('D');
         }
       }
@@ -1270,6 +1320,10 @@ void checkVoltageLimit(char slot) {
           Serial.print("Slot D cycle "); Serial.print(cycleCountD); Serial.print("/");
           Serial.print(cycleTargetD); Serial.println(" - discharge→pause (2 s)");
         } else {
+          if (battNumD > 0 && GSheet.ready()) {
+            delay(100); logSeparatorRow(SHEET_ID_D); delay(100);
+            logSlotToSheet(SHEET_ID_D, "Discharge Complete", battNumD, elapsedD, voltageD, 0, capacityD);
+          }
           resetSlotRelays('D');
         }
         Serial.println("Slot D discharge ended.");
@@ -1286,6 +1340,7 @@ void processDeferredDischarge() {
   if (AdischargeWait && now - AdischargeStart >= 10000) {
     AdischargeWait=false; AdischargePending=false; Adischarge=true;
     digitalWrite(AMS,LOW); digitalWrite(ACD,LOW);
+    logModeStartHeader('A', "Discharge - Start");
     logPhaseStart('A', "DISCHARGING");
     Serial.println("Slot A standalone DISCHARGE started");
     showSlot('A');
@@ -1293,6 +1348,7 @@ void processDeferredDischarge() {
   if (BdischargeWait && now - BdischargeStart >= 10000) {
     BdischargeWait=false; BdischargePending=false; Bdischarge=true;
     digitalWrite(BMS,LOW); digitalWrite(BCD,LOW);
+    logModeStartHeader('B', "Discharge - Start");
     logPhaseStart('B', "DISCHARGING");
     Serial.println("Slot B standalone DISCHARGE started");
     showSlot('B');
@@ -1300,6 +1356,7 @@ void processDeferredDischarge() {
   if (CdischargeWait && now - CdischargeStart >= 10000) {
     CdischargeWait=false; CdischargePending=false; Cdischarge=true;
     digitalWrite(CMS,LOW); digitalWrite(CCD,LOW);
+    logModeStartHeader('C', "Discharge - Start");
     logPhaseStart('C', "DISCHARGING");
     Serial.println("Slot C standalone DISCHARGE started");
     showSlot('C');
@@ -1307,6 +1364,7 @@ void processDeferredDischarge() {
   if (DdischargeWait && now - DdischargeStart >= 10000) {
     DdischargeWait=false; DdischargePending=false; Ddischarge=true;
     digitalWrite(DMS,LOW); digitalWrite(DCD,LOW);
+    logModeStartHeader('D', "Discharge - Start");
     logPhaseStart('D', "DISCHARGING");
     Serial.println("Slot D standalone DISCHARGE started");
     showSlot('D');
